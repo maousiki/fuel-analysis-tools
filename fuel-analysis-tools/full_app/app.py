@@ -85,7 +85,4 @@ def main():
             st.bar_chart(df.set_index("乗務員")["平均速度_km_per_h"])
 
         except Exception as e:
-            st.error(f"エラーが発生しました: {e}")
-
-if __name__ == "__main__":
-    main()
+            st
