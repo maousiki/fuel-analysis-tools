@@ -4,8 +4,9 @@ import csv
 import os
 
 # 登録情報の保存ファイル
-USER_DATA_FILE = "users.csv"
-st.sidebar.text(f"登録ユーザー一覧: {list(st.session_state['user_credentials'].keys())}")
+users = st.session_state.get("user_credentials", {})
+st.sidebar.text(f"登録ユーザー一覧: {list(users.keys())}")
+
 
 
 # 初回起動時にCSVファイルを読み込み
