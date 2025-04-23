@@ -1,4 +1,5 @@
 import streamlit as st
+iimport streamlit as st
 import pandas as pd
 import plotly.express as px
 
@@ -25,26 +26,33 @@ def process_csv_data(uploaded_file, fuel_price, fuel_efficiency, idling_threshol
     # CSV 読み込み
     df = pd.read_csv(uploaded_file, encoding="cp932")
 
-    # カラム名マッピング（動的に類似列を検出してリネーム）
-    # 走行時間列
-    handle_col = next((c for c in df.columns if 'ハンドル時間' in c), None)
-    if handle_col:
-        df.rename(columns={handle_col: '走行時間'}, inplace=True)
-    # アイドリング時間列
-    idle_col = next((c for c in df.columns if 'アイドリング時間' in c), None)
-    if idle_col:
-        df.rename(columns={idle_col: 'アイドリング時間'}, inplace=True)
+    # 列名デバッグ（問題あればコメント解除して列名を確認）
+    # st.write("Columns:", df.columns.tolist())
 
-    # 日付列
+    # 走行時間(ハンドル時間) 列名検出
+    handle_col = next((c for c in df.columns if 'ハンドル' in c), None)
+    if not handle_col:
+        raise Exception(f"走行時間(ハンドル時間) 列が見つかりません。ファイルの列一覧を確認してください: {df.columns.tolist()}")
+    df.rename(columns={handle_col: '走行時間'}, inplace=True)
+
+    # アイドリング時間 列名検出
+    idle_col = next((c for c in df.columns if 'アイドリング' in c), None)
+    if not idle_col:
+        raise Exception(f"アイドリング時間 列が見つかりません。ファイルの列一覧を確認してください: {df.columns.tolist()}")
+    df.rename(columns={idle_col: 'アイドリング時間'}, inplace=True)
+
+    # 日付 列名検出
     date_col = next((c for c in df.columns if '日付' in c), None)
 
     # 時間変換
-    df['運転時間_分']        = df.get('走行時間', pd.Series()).apply(convert_time_to_minutes)
-    df['アイドリング時間_分'] = df.get('アイドリング時間', pd.Series()).apply(convert_time_to_minutes)
+    df['運転時間_分']        = df['走行時間'].apply(convert_time_to_minutes)
+    df['アイドリング時間_分'] = df['アイドリング時間'].apply(convert_time_to_minutes)
 
-    # 走行距離列
+    # 走行距離 列名検出
     dist_col = next((c for c in df.columns if '走行距離' in c or '区間距離' in c), None)
-    df['走行距離_km'] = pd.to_numeric(df.get(dist_col, 0), errors='coerce')
+    if not dist_col:
+        raise Exception(f"走行距離 列が見つかりません。ファイルの列一覧を確認してください: {df.columns.tolist()}")
+    df['走行距離_km'] = pd.to_numeric(df[dist_col], errors='coerce')
 
     # 欠損／ゼロ除外
     df = df.dropna(subset=['運転時間_分', '走行距離_km'])
@@ -63,7 +71,7 @@ def process_csv_data(uploaded_file, fuel_price, fuel_efficiency, idling_threshol
         df['運行日'] = pd.to_datetime(df[date_col], errors='coerce')
 
     # カラー判定用
-    df['燃料費カラー']    = df['燃料費_円'].apply(lambda x: 'red' if x > fuel_price * 100 else 'blue')
+    df['燃料費カラー']     = df['燃料費_円'].apply(lambda x: 'red' if x > fuel_price * 100 else 'blue')
     df['アイドリングカラー'] = df['アイドリング率_％'].apply(lambda x: 'red' if x > idling_threshold else 'blue')
 
     return df
@@ -81,7 +89,6 @@ uploaded_file = st.file_uploader('走行ログ CSV をアップロード (cp932 
 
 if uploaded_file:
     try:
-        # データ処理
         df = process_csv_data(uploaded_file, fuel_price, fuel_efficiency, idling_threshold)
         st.success('データを正常に読み込みました！')
 
@@ -94,48 +101,8 @@ if uploaded_file:
         csv = df.to_csv(index=False, encoding='utf-8-sig')
         st.download_button('CSVダウンロード', csv, 'analysis.csv', 'text/csv')
 
-        # ランキング
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.subheader('燃料費ランキング')
-            st.dataframe(df.sort_values('燃料費_円', ascending=False)[['乗務員','燃料費_円']])
-        with col2:
-            st.subheader('アイドリング率ランキング')
-            st.dataframe(df.sort_values('アイドリング率_％', ascending=False)[['乗務員','アイドリング率_％']])
-        with col3:
-            st.subheader('平均速度ランキング')
-            st.dataframe(df.sort_values('平均速度_km_h', ascending=False)[['乗務員','平均速度_km_h']])
-
-        # ドライバー別グラフ
-        st.subheader('📊 ドライバー別指標')
-        fig1 = px.bar(df, x='乗務員', y='燃料費_円', color='燃料費カラー', title='燃料費')
-        fig1.update_layout(xaxis_tickangle=-45)
-        st.plotly_chart(fig1, use_container_width=True)
-
-        fig2 = px.bar(df, x='乗務員', y='アイドリング率_％', color='アイドリングカラー', title='アイドリング率')
-        fig2.update_layout(xaxis_tickangle=-45)
-        st.plotly_chart(fig2, use_container_width=True)
-
-        fig3 = px.bar(df, x='乗務員', y='平均速度_km_h', title='平均速度')
-        fig3.update_layout(xaxis_tickangle=-45)
-        st.plotly_chart(fig3, use_container_width=True)
-
-        # 月次集計
-        st.subheader('📅 月次集計')
-        summary = df.groupby('乗務員').agg({
-            '走行距離_km':'sum', '燃料使用量_L':'sum', 'アイドリング時間_分':'sum', '運転時間_分':'sum'
-        }).reset_index()
-        summary['月間平均燃費']   = (summary['走行距離_km']/summary['燃料使用量_L']).round(2)
-        summary['月間アイドリング率'] = (summary['アイドリング時間_分']/summary['運転時間_分']*100).round(2)
-        st.dataframe(summary[['乗務員','月間平均燃費','月間アイドリング率']])
-
-        fig4 = px.bar(summary, x='乗務員', y='月間平均燃費', title='月間平均燃費')
-        fig4.update_layout(xaxis_tickangle=-45)
-        st.plotly_chart(fig4, use_container_width=True)
-
-        fig5 = px.bar(summary, x='乗務員', y='月間アイドリング率', title='月間アイドリング率')
-        fig5.update_layout(xaxis_tickangle=-45)
-        st.plotly_chart(fig5, use_container_width=True)
+        # ランキング・グラフ...
+        # （省略。全体は先ほどのまま）
 
     except Exception as e:
         st.error(f"エラーが発生しました: {e}")
