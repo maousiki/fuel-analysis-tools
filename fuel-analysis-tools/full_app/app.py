@@ -145,7 +145,7 @@ if uploaded_file:
         st.subheader('📅 月間ドライバー別集計')
         st.dataframe(summary)
 
-        # グラフ表示
+                # グラフ表示
         st.subheader('📊 月間平均燃費ランキング')
         fig1 = px.bar(summary.sort_values('月間平均燃費_km_L', ascending=False),
                       x='乗務員', y='月間平均燃費_km_L',
@@ -153,11 +153,21 @@ if uploaded_file:
         fig1.update_layout(xaxis_tickangle=-45)
         st.plotly_chart(fig1, use_container_width=True)
 
+        # 月間アイドリング率のカラー分け
+        # 閾値 idling_threshold の5%下を青、5%未満〜閾値未満を黄色、閾値以上を赤
+        summary['アイドリング色'] = np.where(
+            summary['月間アイドリング率_％'] >= idling_threshold, 'red',
+            np.where(summary['月間アイドリング率_％'] < idling_threshold - 5, 'blue', 'yellow')
+        )
         st.subheader('📊 月間アイドリング率ランキング')
-        fig2 = px.bar(summary.sort_values('月間アイドリング率_％', ascending=False),
-                      x='乗務員', y='月間アイドリング率_％',
-                      title='ドライバー別 月間アイドリング率 (%)')
-        fig2.update_layout(xaxis_tickangle=-45)
+        fig2 = px.bar(
+            summary.sort_values('月間アイドリング率_％', ascending=False),
+            x='乗務員', y='月間アイドリング率_％',
+            color='アイドリング色',
+            color_discrete_map={'red':'red','yellow':'yellow','blue':'blue'},
+            title=f'ドライバー別 月間アイドリング率 (%) (閾値: {idling_threshold}%)'
+        )
+        fig2.update_layout(xaxis_tickangle=-45, showlegend=False)
         st.plotly_chart(fig2, use_container_width=True)
 
         # 算出式の表示
@@ -166,6 +176,7 @@ if uploaded_file:
         st.markdown('- 燃料費 (円) = 燃料使用量 (L) × 燃料単価 (円/L)')
         st.markdown('- 月間平均燃費 (km/L) = 走行距離合計_km ÷ 燃料使用量合計_L')
         st.markdown('- 月間アイドリング率 (%) = アイドリング時間合計_分 ÷ 稼働時間合計_分 × 100')
-
-    except Exception as e:
-        st.error(f"エラー: {e}")
+        st.markdown('- カラー条件:')
+        st.markdown('    - 青: 設定閾値-5% 未満')
+        st.markdown('    - 黄: 設定閾値-5% 以上かつ閾値未満')
+        st.markdown('    - 赤: 設定閾値以上')
