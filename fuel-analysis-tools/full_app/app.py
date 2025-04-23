@@ -24,7 +24,6 @@ def convert_time_to_minutes(time_str):
 
 # ──────────── データ処理関数 ────────────
 def process_csv_data(df, fuel_price, fuel_efficiency, idling_threshold, date_col=None):
-    # 走行距離の数値変換
     df['走行距離'] = df['走行距離'].astype(str).str.replace(r'[^0-9\.]', '', regex=True)
     df['走行距離_km'] = pd.to_numeric(df['走行距離'], errors='coerce')
     df = df.dropna(subset=['走行距離_km'])
@@ -37,15 +36,12 @@ def process_csv_data(df, fuel_price, fuel_efficiency, idling_threshold, date_col
     if '走行時間' in df.columns and 'アイドリング時間' in df.columns:
         df['運転時間_分'] = df['走行時間'].apply(convert_time_to_minutes)
         df['アイドリング時間_分'] = df['アイドリング時間'].apply(convert_time_to_minutes)
-        # 有効な運転時間のみ
         valid = df['運転時間_分'] > 0
-        # アイドリング率: 運転時間ゼロ回避
         df['アイドリング率_％'] = np.where(
             valid,
             (df['アイドリング時間_分'] / df['運転時間_分'] * 100).round(2),
             pd.NA
         )
-        # 平均速度: 運転時間ゼロ回避
         df['平均速度_km_h'] = np.where(
             valid,
             (df['走行距離_km'] / (df['運転時間_分'] / 60)).round(2),
@@ -57,13 +53,6 @@ def process_csv_data(df, fuel_price, fuel_efficiency, idling_threshold, date_col
         df['アイドリング率_％'] = pd.NA
         df['平均速度_km_h'] = pd.NA
 
-    # 日付変換
-        df['運転時間_分'] = pd.NA
-        df['アイドリング時間_分'] = pd.NA
-        df['アイドリング率_％'] = pd.NA
-        df['平均速度_km_h'] = pd.NA
-
-    # 日付変換
     if date_col and date_col in df.columns:
         df['運行日'] = pd.to_datetime(df[date_col], errors='coerce')
 
@@ -84,40 +73,31 @@ uploaded_file = st.file_uploader('CSV アップロード (cp932)', type=['csv'])
 if uploaded_file:
     try:
         df_raw = pd.read_csv(uploaded_file, encoding='cp932')
-        # 重複カラム除去
         df_raw = df_raw.T.drop_duplicates(keep='first').T
-        st.write('**DEBUG: CSV カラム一覧**', df_raw.columns.tolist())
 
         # 列名マッピング
-        # 走行距離
         if '一般・実車走行距離' in df_raw.columns:
             dist_col = '一般・実車走行距離'
         elif '走行距離' in df_raw.columns:
             dist_col = '走行距離'
         else:
             raise Exception(f"走行距離列が見つかりません: {df_raw.columns.tolist()}")
-        # アイドリング時間 （任意）
         idle_col = 'アイドリング時間' if 'アイドリング時間' in df_raw.columns else None
-        # 日付列
         date_col = '日付' if '日付' in df_raw.columns else None
 
-        # リネーム
         rename_map = {dist_col: '走行距離'}
         if idle_col:
             rename_map[idle_col] = 'アイドリング時間'
         df = df_raw.rename(columns=rename_map)
-        # 同一カラム名による重複を削除して、Seriesとして扱えるようにする
         df = df.loc[:, ~df.columns.duplicated()]
 
-        # ドライバー名必須
         if '乗務員' not in df.columns:
             raise Exception("'乗務員' 列が見つかりません。CSVに '乗務員' 列を含めてください。")
 
-        # データ処理
         df = process_csv_data(df, fuel_price, fuel_efficiency, idling_threshold, date_col)
         st.success('✅ データ読み込み完了')
 
-        # 原データプレビュー
+        # データプレビュー
         st.subheader('🔍 データプレビュー')
         st.dataframe(df[['乗務員','運行日','走行距離_km','燃料使用量_L','燃料費_円','アイドリング率_％','平均速度_km_h']])
 
@@ -129,7 +109,6 @@ if uploaded_file:
             運転時間_分=('運転時間_分','sum'),
             アイドリング時間_分=('アイドリング時間_分','sum')
         )
-        # 分母ゼロ回避
         summary['月間平均燃費_km_L'] = np.where(
             summary['燃料使用量_L']>0,
             (summary['走行距離_km']/summary['燃料使用量_L']).round(2),
@@ -142,6 +121,28 @@ if uploaded_file:
         )
         st.subheader('📅 月間ドライバー別集計')
         st.dataframe(summary)
+
+        # グラフ表示
+        st.subheader('📊 月間平均燃費ランキング')
+        fig1 = px.bar(summary.sort_values('月間平均燃費_km_L', ascending=False),
+                      x='乗務員', y='月間平均燃費_km_L',
+                      title='ドライバー別 月間平均燃費 (km/L)')
+        fig1.update_layout(xaxis_tickangle=-45)
+        st.plotly_chart(fig1, use_container_width=True)
+
+        st.subheader('📊 月間アイドリング率ランキング')
+        fig2 = px.bar(summary.sort_values('月間アイドリング率_％', ascending=False),
+                      x='乗務員', y='月間アイドリング率_％',
+                      title='ドライバー別 月間アイドリング率 (%)')
+        fig2.update_layout(xaxis_tickangle=-45)
+        st.plotly_chart(fig2, use_container_width=True)
+
+        # 算出式の表示
+        st.markdown('**算出式**')
+        st.markdown('- 燃料使用量 (L) = 走行距離_km ÷ 想定燃費 (km/L)')
+        st.markdown('- 燃料費 (円) = 燃料使用量 (L) × 燃料単価 (円/L)')
+        st.markdown('- 月間平均燃費 (km/L) = 走行距離合計_km ÷ 燃料使用量合計_L')
+        st.markdown('- 月間アイドリング率 (%) = アイドリング時間合計_分 ÷ 運転時間合計_分 × 100')
 
     except Exception as e:
         st.error(f"エラー: {e}")
