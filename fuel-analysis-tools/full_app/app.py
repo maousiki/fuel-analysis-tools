@@ -176,3 +176,5 @@ if uploaded_file:
         st.markdown('  - 青: 設定閾値-10% 未満')
         st.markdown('  - 黄: 設定閾値-10% 以上かつ閾値未満')
         st.markdown('  - 赤: 設定閾値以上')
+    except Exception as e:
+        st.error(f"エラー: {e}")
