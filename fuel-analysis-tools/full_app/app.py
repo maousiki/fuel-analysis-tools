@@ -1,5 +1,4 @@
 import streamlit as st
-iimport streamlit as st
 import pandas as pd
 import plotly.express as px
 
@@ -22,37 +21,13 @@ def convert_time_to_minutes(time_str):
     return pd.NA
 
 # ──────────── CSV処理関数 ────────────
-def process_csv_data(uploaded_file, fuel_price, fuel_efficiency, idling_threshold):
-    # CSV 読み込み
-    df = pd.read_csv(uploaded_file, encoding="cp932")
-
-    # 列名デバッグ（問題あればコメント解除して列名を確認）
-    # st.write("Columns:", df.columns.tolist())
-
-    # 走行時間(ハンドル時間) 列名検出
-    handle_col = next((c for c in df.columns if 'ハンドル' in c), None)
-    if not handle_col:
-        raise Exception(f"走行時間(ハンドル時間) 列が見つかりません。ファイルの列一覧を確認してください: {df.columns.tolist()}")
-    df.rename(columns={handle_col: '走行時間'}, inplace=True)
-
-    # アイドリング時間 列名検出
-    idle_col = next((c for c in df.columns if 'アイドリング' in c), None)
-    if not idle_col:
-        raise Exception(f"アイドリング時間 列が見つかりません。ファイルの列一覧を確認してください: {df.columns.tolist()}")
-    df.rename(columns={idle_col: 'アイドリング時間'}, inplace=True)
-
-    # 日付 列名検出
-    date_col = next((c for c in df.columns if '日付' in c), None)
-
+def process_csv_data(df, fuel_price, fuel_efficiency, idling_threshold, date_col=None):
     # 時間変換
     df['運転時間_分']        = df['走行時間'].apply(convert_time_to_minutes)
     df['アイドリング時間_分'] = df['アイドリング時間'].apply(convert_time_to_minutes)
 
-    # 走行距離 列名検出
-    dist_col = next((c for c in df.columns if '走行距離' in c or '区間距離' in c), None)
-    if not dist_col:
-        raise Exception(f"走行距離 列が見つかりません。ファイルの列一覧を確認してください: {df.columns.tolist()}")
-    df['走行距離_km'] = pd.to_numeric(df[dist_col], errors='coerce')
+    # 走行距離数値変換
+    df['走行距離_km'] = pd.to_numeric(df['走行距離'], errors='coerce')
 
     # 欠損／ゼロ除外
     df = df.dropna(subset=['運転時間_分', '走行距離_km'])
@@ -89,7 +64,35 @@ uploaded_file = st.file_uploader('走行ログ CSV をアップロード (cp932 
 
 if uploaded_file:
     try:
-        df = process_csv_data(uploaded_file, fuel_price, fuel_efficiency, idling_threshold)
+        # 生データ読み込み
+        df_raw = pd.read_csv(uploaded_file, encoding='cp932')
+        # デバッグ：列名を表示
+        st.write('DEBUG: 読み込んだCSVの列名一覧', df_raw.columns.tolist())
+
+        # 列名マッピング
+        # 走行時間(ハンドル時間)
+        handle_col = next((c for c in df_raw.columns if 'ハンドル' in c), None)
+        # アイドリング時間
+        idle_col   = next((c for c in df_raw.columns if 'アイドリング' in c), None)
+        # 走行距離
+        dist_col   = next((c for c in df_raw.columns if '走行距離' in c or '区間距離' in c), None)
+        # 日付
+        date_col   = next((c for c in df_raw.columns if '日付' in c), None)
+
+        # 例外時はカラム一覧を元に修正
+        if not handle_col or not idle_col or not dist_col:
+            missing = [name for name, col in [('走行時間', handle_col), ('アイドリング時間', idle_col), ('走行距離', dist_col)] if not col]
+            raise Exception(f"以下の必須列が見つかりませんでした: {missing}. 列一覧: {df_raw.columns.tolist()}")
+
+        # 読み替え
+        df_raw = df_raw.rename(columns={
+            handle_col: '走行時間',
+            idle_col:   'アイドリング時間',
+            dist_col:   '走行距離'
+        })
+
+        # データ処理
+        df = process_csv_data(df_raw, fuel_price, fuel_efficiency, idling_threshold, date_col)
         st.success('データを正常に読み込みました！')
 
         # プレビュー
@@ -101,8 +104,7 @@ if uploaded_file:
         csv = df.to_csv(index=False, encoding='utf-8-sig')
         st.download_button('CSVダウンロード', csv, 'analysis.csv', 'text/csv')
 
-        # ランキング・グラフ...
-        # （省略。全体は先ほどのまま）
+        # （ランキング・グラフ表示は省略）
 
     except Exception as e:
         st.error(f"エラーが発生しました: {e}")
