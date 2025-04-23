@@ -180,19 +180,16 @@ if uploaded_file:
         st.markdown('- 月間平均燃費 (km/L) = 走行距離合計_km ÷ 燃料使用量合計_L')
         st.markdown('- 月間アイドリング率 (%) = アイドリング時間合計_分 ÷ 稼働時間合計_分 × 100')
 
-        # 燃料使用量とアイドリング率の関係性分析
+                # 燃料使用量とアイドリング率の関係性分析
         st.subheader('🔍 燃料使用量とアイドリング率の相関分析')
         fig_corr = px.scatter(
-            summary, x='アイドリング率_％', y='燃料使用量_L',
-            title='ドライバー別 燃料使用量 (L) vs アイドリング率 (%)',
+            summary, x='月間アイドリング率_％', y='燃料使用量_L',
+            title='ドライバー別 燃料使用量 (L) vs 月間アイドリング率 (%)',
             trendline='ols',
-            labels={'アイドリング率_％': 'アイドリング率 (%)', '燃料使用量_L': '燃料使用量 (L)'}
+            labels={'月間アイドリング率_％': '月間アイドリング率 (%)', '燃料使用量_L': '燃料使用量 (L)'}
         )
         fig_corr.update_layout(xaxis_tickangle=-45)
         st.plotly_chart(fig_corr, use_container_width=True)
         # 相関係数計算
-        corr_value = summary[['アイドリング率_％','燃料使用量_L']].dropna().corr().iloc[0,1]
+        corr_value = summary[['月間アイドリング率_％','燃料使用量_L']].dropna().corr().iloc[0,1]
         st.write(f'**相関係数**: {corr_value:.2f} (Pearson)')
-
-    except Exception as e:
-        st.error(f"エラー: {e}")
