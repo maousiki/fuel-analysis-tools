@@ -37,11 +37,27 @@ def process_csv_data(df, fuel_price, fuel_efficiency, idling_threshold, date_col
     if '走行時間' in df.columns and 'アイドリング時間' in df.columns:
         df['運転時間_分'] = df['走行時間'].apply(convert_time_to_minutes)
         df['アイドリング時間_分'] = df['アイドリング時間'].apply(convert_time_to_minutes)
+        # 有効な運転時間のみ
         valid = df['運転時間_分'] > 0
-        df.loc[~valid, ['運転時間_分','アイドリング時間_分']] = pd.NA
-        df['アイドリング率_％'] = (df['アイドリング時間_分'] / df['運転時間_分'] * 100).round(2)
-        df['平均速度_km_h'] = (df['走行距離_km'] / (df['運転時間_分'] / 60)).round(2)
+        # アイドリング率: 運転時間ゼロ回避
+        df['アイドリング率_％'] = np.where(
+            valid,
+            (df['アイドリング時間_分'] / df['運転時間_分'] * 100).round(2),
+            pd.NA
+        )
+        # 平均速度: 運転時間ゼロ回避
+        df['平均速度_km_h'] = np.where(
+            valid,
+            (df['走行距離_km'] / (df['運転時間_分'] / 60)).round(2),
+            pd.NA
+        )
     else:
+        df['運転時間_分'] = pd.NA
+        df['アイドリング時間_分'] = pd.NA
+        df['アイドリング率_％'] = pd.NA
+        df['平均速度_km_h'] = pd.NA
+
+    # 日付変換
         df['運転時間_分'] = pd.NA
         df['アイドリング時間_分'] = pd.NA
         df['アイドリング率_％'] = pd.NA
