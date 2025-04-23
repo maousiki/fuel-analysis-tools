@@ -95,7 +95,6 @@ if uploaded_file:
         df = df_raw.rename(columns=rename_map)
         df = df.loc[:, ~df.columns.duplicated()]
 
-        # ドライバー名必須チェック
         if '乗務員' not in df.columns:
             raise Exception("'乗務員' 列が見つかりません。CSVに '乗務員' 列を含めてください。")
 
@@ -133,15 +132,25 @@ if uploaded_file:
         st.subheader('📅 月間ドライバー別集計')
         st.dataframe(summary)
 
-        # 平均燃費ランキング
-        st.subheader('📊 月間平均燃費ランキング')
-        fig1 = px.bar(
-            summary.sort_values('月間平均燃費_km_L', ascending=False),
-            x='乗務員', y='月間平均燃費_km_L',
-            title='ドライバー別 月間平均燃費 (km/L)'
+        # 燃料使用量ランキング
+        st.subheader('📊 月間燃料使用量ランキング')
+        fig_fuel_use = px.bar(
+            summary.sort_values('燃料使用量_L', ascending=False),
+            x='乗務員', y='燃料使用量_L',
+            title='ドライバー別 月間燃料使用量 (L)'
         )
-        fig1.update_layout(xaxis_tickangle=-45)
-        st.plotly_chart(fig1, use_container_width=True)
+        fig_fuel_use.update_layout(xaxis_tickangle=-45)
+        st.plotly_chart(fig_fuel_use, use_container_width=True)
+
+        # 燃料費ランキング
+        st.subheader('📊 月間燃料費ランキング')
+        fig_fuel_cost = px.bar(
+            summary.sort_values('燃料費_円', ascending=False),
+            x='乗務員', y='燃料費_円',
+            title='ドライバー別 月間燃料費 (円)'
+        )
+        fig_fuel_cost.update_layout(xaxis_tickangle=-45, yaxis_tickformat=',')
+        st.plotly_chart(fig_fuel_cost, use_container_width=True)
 
         # アイリング率色分け（2色）＆閾値ライン
         summary['アイドリング色'] = np.where(
