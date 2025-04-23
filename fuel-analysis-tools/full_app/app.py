@@ -70,24 +70,30 @@ uploaded_file = st.file_uploader('走行ログ CSV をアップロード (cp932 
 
 if uploaded_file:
     try:
-        # 生データ読み込み
+        # CSV読み込み
         df_raw = pd.read_csv(uploaded_file, encoding='cp932')
-        # 重複カラム除去（インデックスとラベル双方で）
+        # 重複カラム除去
         df_raw = df_raw.T.drop_duplicates(keep='first').T
         # デバッグ用：列名一覧表示
         st.write('**DEBUG: 読み込んだ CSV カラム一覧**', df_raw.columns.tolist())
 
         # 必須列の検出とリネーム
-        handle_col = next((c for c in df_raw.columns if 'ハンドル' in c or '走行時間' in c), None)
-        idle_col   = next((c for c in df_raw.columns if 'アイドリング' in c), None)
-        dist_col   = next((c for c in df_raw.columns if '走行距離' in c or '区間距離' in c), None)
-        date_col   = next((c for c in df_raw.columns if '日付' in c), None)
+        # アイドリング時間列
+        idle_col = next((c for c in df_raw.columns if 'アイドリング' in c), None)
+        # 走行時間列：'ハンドル'または『時間』を含むがアイドリングでないもの
+        handle_col = next((c for c in df_raw.columns
+                            if ('ハンドル' in c or ('時間' in c and 'アイドリング' not in c))
+                           ), None)
+        # 走行距離列
+        dist_col = next((c for c in df_raw.columns if '走行距離' in c or '区間距離' in c), None)
+        # 日付列
+        date_col = next((c for c in df_raw.columns if '日付' in c), None)
 
         missing = [name for name, col in [('走行時間', handle_col), ('アイドリング時間', idle_col), ('走行距離', dist_col)] if not col]
         if missing:
             raise Exception(f"必須列が見つかりません: {missing}. CSVカラム一覧: {df_raw.columns.tolist()}")
 
-        # 列名を標準化
+        # 標準カラムにリネーム
         df_raw = df_raw.rename(columns={
             handle_col: '走行時間',
             idle_col:   'アイドリング時間',
