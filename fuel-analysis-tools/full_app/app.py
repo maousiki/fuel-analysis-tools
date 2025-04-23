@@ -192,7 +192,7 @@ if uploaded_file:
         st.plotly_chart(fig_corr, use_container_width=True)
         # 相関係数計算
         corr_value = summary[['アイドリング率_％','燃料使用量_L']].dropna().corr().iloc[0,1]
-        st.write(f'**相関係数**: {corr_value:.2f} (Pearson)'))
+        st.write(f'**相関係数**: {corr_value:.2f} (Pearson)')
 
     except Exception as e:
         st.error(f"エラー: {e}")
