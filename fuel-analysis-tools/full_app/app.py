@@ -72,8 +72,8 @@ if uploaded_file:
     try:
         # 生データ読み込み
         df_raw = pd.read_csv(uploaded_file, encoding='cp932')
-        # 重複カラムを除去
-        df_raw = df_raw.loc[:, ~df_raw.columns.duplicated()]
+        # 重複カラム除去（インデックスとラベル双方で）
+        df_raw = df_raw.T.drop_duplicates(keep='first').T
         # デバッグ用：列名一覧表示
         st.write('**DEBUG: 読み込んだ CSV カラム一覧**', df_raw.columns.tolist())
 
