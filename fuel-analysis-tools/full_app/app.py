@@ -23,7 +23,16 @@ def convert_time_to_minutes(time_str):
 
 # ──────────── データ処理関数 ────────────
 def process_csv_data(df, fuel_price, fuel_efficiency, idling_threshold, date_col=None):
-    # 燃料使用量・費用
+    # 数値列の文字列クリーニング（カンマ削除など）
+    if '走行距離' in df.columns:
+        df['走行距離'] = df['走行距離'].astype(str).str.replace(r'[^0-9\.]', '', regex=True)
+    
+    # 走行距離・燃料計算
+    df['走行距離_km'] = pd.to_numeric(df['走行距離'], errors='coerce')
+    df = df.dropna(subset=['走行距離_km'])
+    df['燃料使用量_L'] = (df['走行距離_km'] / fuel_efficiency).round(2)
+    df['燃料費_円'] = (df['燃料使用量_L'] * fuel_price).round(0)
+    # 走行距離・燃料計算
     df['走行距離_km'] = pd.to_numeric(df['走行距離'], errors='coerce')
     df = df.dropna(subset=['走行距離_km'])
     df['燃料使用量_L'] = (df['走行距離_km'] / fuel_efficiency).round(2)
@@ -33,26 +42,18 @@ def process_csv_data(df, fuel_price, fuel_efficiency, idling_threshold, date_col
     if '走行時間' in df.columns and 'アイドリング時間' in df.columns:
         df['運転時間_分'] = df['走行時間'].apply(convert_time_to_minutes)
         df['アイドリング時間_分'] = df['アイドリング時間'].apply(convert_time_to_minutes)
-        # 有効な運転時間のみ
         valid = df['運転時間_分'] > 0
         df.loc[~valid, ['運転時間_分','アイドリング時間_分']] = pd.NA
-        # 指標
         df['アイドリング率_％'] = (df['アイドリング時間_分'] / df['運転時間_分'] * 100).round(2)
         df['平均速度_km_h'] = (df['走行距離_km'] / (df['運転時間_分'] / 60)).round(2)
     else:
-        # 存在しない場合は NA
         df['運転時間_分'] = pd.NA
         df['アイドリング時間_分'] = pd.NA
         df['アイドリング率_％'] = pd.NA
         df['平均速度_km_h'] = pd.NA
 
-    # 日付変換
     if date_col and date_col in df.columns:
         df['運行日'] = pd.to_datetime(df[date_col], errors='coerce')
-
-    # カラー判定用
-    df['燃料費カラー'] = df['燃料費_円'].apply(lambda x: 'red' if x > fuel_price * 100 else 'blue')
-    df['アイドリングカラー'] = df['アイドリング率_％'].apply(lambda x: 'red' if pd.notna(x) and x > idling_threshold else 'blue')
 
     return df
 
@@ -70,40 +71,47 @@ uploaded_file = st.file_uploader('CSVアップロード (cp932)', type=['csv'])
 if uploaded_file:
     try:
         df_raw = pd.read_csv(uploaded_file, encoding='cp932')
-        # 重複カラムを除去
         df_raw = df_raw.T.drop_duplicates(keep='first').T
         st.write('**DEBUG: CSV カラム一覧**', df_raw.columns.tolist())
 
-        # 列名検出
-        idle_col = 'アイドリング時間' if 'アイドリング時間' in df_raw.columns else None
-        # 運転時間列なしのためスキップ
-        handle_col = None
-        # 走行距離列
+        # 列名検出とリネーム
+        # 走行距離
         if '走行距離' in df_raw.columns:
             dist_col = '走行距離'
         elif '一般・実車走行距離' in df_raw.columns:
             dist_col = '一般・実車走行距離'
         else:
-            dist_col = None
-        # 日付列
+            raise Exception(f"走行距離列が見つかりません: {df_raw.columns.tolist()}")
+        # アイドリング時間
+        idle_col = 'アイドリング時間' if 'アイドリング時間' in df_raw.columns else None
+        # 日付
         date_col = '日付' if '日付' in df_raw.columns else None
 
-        if not dist_col:
-            raise Exception(f"走行距離列が見つかりません: {df_raw.columns.tolist()}")
-
-        # リネーム
-        rename_map = {dist_col:'走行距離'}
+        rename_map = {dist_col: '走行距離'}
         if idle_col:
             rename_map[idle_col] = 'アイドリング時間'
         df = df_raw.rename(columns=rename_map)
+
+        # ドライバー名カラム必須
+        if '乗務員' not in df.columns:
+            raise Exception("'乗務員' 列が見つかりません。CSVに乗務員列を含めてください。")
 
         # データ処理
         df = process_csv_data(df, fuel_price, fuel_efficiency, idling_threshold, date_col)
         st.success('データ読み込み完了')
 
-        # プレビュー
-        display = ['運行日','走行距離_km','燃料使用量_L','燃料費_円','アイドリング率_％','平均速度_km_h']
-        st.dataframe(df[[c for c in display if c in df.columns]])
+        # 月間合計をドライバー別に集計
+        summary = df.groupby('乗務員').agg(
+            走行距離_km=('走行距離_km', 'sum'),
+            燃料使用量_L=('燃料使用量_L', 'sum'),
+            燃料費_円=('燃料費_円', 'sum'),
+            運転時間_分=('運転時間_分', 'sum'),
+            アイドリング時間_分=('アイドリング時間_分', 'sum')
+        )
+        summary['月間平均燃費_km_L'] = (summary['走行距離_km'] / summary['燃料使用量_L']).round(2)
+        summary['月間アイドリング率_％'] = (summary['アイドリング時間_分'] / summary['運転時間_分'] * 100).round(2)
+        st.subheader('📅 月間ドライバー別集計')
+        st.dataframe(summary)
 
     except Exception as e:
         st.error(f"エラー: {e}")
