@@ -90,6 +90,8 @@ if uploaded_file:
         if idle_col:
             rename_map[idle_col] = 'アイドリング時間'
         df = df_raw.rename(columns=rename_map)
+        # 同一カラム名による重複を削除して、Seriesとして扱えるようにする
+        df = df.loc[:, ~df.columns.duplicated()]
 
         # ドライバー名必須
         if '乗務員' not in df.columns:
