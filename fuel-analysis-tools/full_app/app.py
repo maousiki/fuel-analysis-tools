@@ -69,7 +69,10 @@ if uploaded_file:
         df_raw = pd.read_csv(uploaded_file, encoding='cp932')
         df_raw = df_raw.T.drop_duplicates(keep='first').T
 
-        dist_col = '一般・実車走行距離' if '一般・実車走行距離' in df_raw.columns else (
+        # 走行距離の優先択一：まず総走行距離列を、なければ一般・実車走行距離
+        dist_col = '走行距離' if '走行距離' in df_raw.columns else (
+            '一般・実車走行距離' if '一般・実車走行距離' in df_raw.columns else None
+        ) (
             '走行距離' if '走行距離' in df_raw.columns else None
         )
         if not dist_col:
