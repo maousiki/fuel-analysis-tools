@@ -105,9 +105,9 @@ if uploaded_file:
         # 日付列検出（変換用）
         date_col = '運行日' if '運行日' in df.columns else None
 
-        # データ処理
+                # データ処理
         df = process_csv_data(df, fuel_price, fuel_efficiency, date_col)
-        st.success('✅ データ読み込み完了')
+        st.success('✅ データ読み込み完了')('✅ データ読み込み完了')
 
         # データプレビュー
         st.subheader('🔍 データプレビュー')
