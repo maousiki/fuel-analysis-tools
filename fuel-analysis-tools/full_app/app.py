@@ -24,20 +24,16 @@ def convert_time_to_minutes(time_str):
 
 # ──────────── データ処理関数 ────────────
 def process_csv_data(df, fuel_price, fuel_efficiency, date_col=None):
-    # 走行距離のクリーニングと数値変換
     df['走行距離'] = df['走行距離'].astype(str).str.replace(r'[^0-9\.]', '', regex=True)
     df['走行距離_km'] = pd.to_numeric(df['走行距離'], errors='coerce')
     df = df.dropna(subset=['走行距離_km'])
 
-    # 燃料使用量と燃料費の計算
     df['燃料使用量_L'] = (df['走行距離_km'] / fuel_efficiency).round(2)
     df['燃料費_円'] = (df['燃料使用量_L'] * fuel_price).round(0)
 
-    # 時間列の分変換
     for col in ['走行時間', 'アイドリング時間', '稼働時間']:
         df[f'{col}_分'] = df[col].apply(convert_time_to_minutes) if col in df.columns else pd.NA
 
-    # アイドリング率: アイドリング時間 ÷ 稼働時間
     valid_active = df['稼働時間_分'] > 0
     df['アイドリング率_％'] = np.where(
         valid_active,
@@ -45,7 +41,6 @@ def process_csv_data(df, fuel_price, fuel_efficiency, date_col=None):
         pd.NA
     )
 
-    # 平均速度: 走行距離 ÷ (走行時間/60)
     valid_drive = df['走行時間_分'] > 0
     df['平均速度_km_h'] = np.where(
         valid_drive,
@@ -53,7 +48,6 @@ def process_csv_data(df, fuel_price, fuel_efficiency, date_col=None):
         pd.NA
     )
 
-    # 日付列の変換
     if date_col and date_col in df.columns:
         df['運行日'] = pd.to_datetime(df[date_col], errors='coerce')
 
@@ -63,22 +57,18 @@ def process_csv_data(df, fuel_price, fuel_efficiency, date_col=None):
 st.set_page_config(page_title='燃費見える化ダッシュボード', layout='wide')
 st.title('🚚 燃費見える化ダッシュボード')
 
-# 入力パネル
 col1, col2, col3 = st.columns(3)
 fuel_price = col1.number_input('燃料単価 (円/L)', value=160, step=1)
 fuel_efficiency = col2.number_input('想定燃費 (km/L)', value=5.0, step=0.1)
 col2.markdown('_（1〜3トン:10〜17km/L、4トン:約7.5km/L、8トン以上:3〜5km/L）_', unsafe_allow_html=True)
 idling_threshold = col3.slider('アイドリング率警告閾値 (%)', 0, 100, 20)
 
-# CSVアップロード
 uploaded_file = st.file_uploader('CSV アップロード (cp932)', type=['csv'])
 if uploaded_file:
     try:
-        # 生データ読み込み＆重複カラム除去
         df_raw = pd.read_csv(uploaded_file, encoding='cp932')
         df_raw = df_raw.T.drop_duplicates(keep='first').T
 
-        # 列名マッピング
         dist_col = '一般・実車走行距離' if '一般・実車走行距離' in df_raw.columns else (
             '走行距離' if '走行距離' in df_raw.columns else None
         )
@@ -89,8 +79,6 @@ if uploaded_file:
             rename_map['アイドリング時間'] = 'アイドリング時間'
         if '稼働時間' in df_raw.columns:
             rename_map['稼働時間'] = '稼働時間'
-        # 日付 / 運行日 列のマッピング
-        # '日付' または 元々 '運行日' としている場合に対応
         for date_key in ['日付', '運行日']:
             if date_key in df_raw.columns:
                 rename_map[date_key] = '運行日'
@@ -102,19 +90,14 @@ if uploaded_file:
         if '乗務員' not in df.columns:
             raise Exception("'乗務員' 列が見つかりません。CSVに '乗務員' 列を含めてください。")
 
-        # 日付列検出（変換用）
         date_col = '運行日' if '運行日' in df.columns else None
-
-                # データ処理
         df = process_csv_data(df, fuel_price, fuel_efficiency, date_col)
-        st.success('✅ データ読み込み完了')('✅ データ読み込み完了')
+        st.success('✅ データ読み込み完了')
 
-        # データプレビュー
         st.subheader('🔍 データプレビュー')
         preview_cols = ['乗務員', '運行日', '走行距離_km', '燃料使用量_L', '燃料費_円', 'アイドリング率_％', '平均速度_km_h']
         st.dataframe(df[preview_cols])
 
-        # 月間ドライバー別集計
         summary = df.groupby('乗務員', as_index=False).agg(
             走行距離_km=('走行距離_km', 'sum'),
             燃料使用量_L=('燃料使用量_L', 'sum'),
@@ -123,7 +106,6 @@ if uploaded_file:
             アイドリング時間_分=('アイドリング時間_分', 'sum'),
             走行時間_分=('走行時間_分', 'sum')
         )
-        # 指標計算
         summary['月間平均燃費_km_L'] = np.where(
             summary['燃料使用量_L'] > 0,
             (summary['走行距離_km'] / summary['燃料使用量_L']).round(2),
@@ -135,11 +117,9 @@ if uploaded_file:
             pd.NA
         )
 
-        # 月間集計とグラフ
         st.subheader('📅 月間ドライバー別集計')
         st.dataframe(summary)
 
-        # 燃料使用量ランキング
         st.subheader('📊 月間燃料使用量ランキング')
         fig_fuel_use = px.bar(
             summary.sort_values('燃料使用量_L', ascending=False),
@@ -148,7 +128,6 @@ if uploaded_file:
         fig_fuel_use.update_layout(xaxis_tickangle=-45)
         st.plotly_chart(fig_fuel_use, use_container_width=True)
 
-        # 燃料費ランキング
         st.subheader('📊 月間燃料費ランキング')
         fig_fuel_cost = px.bar(
             summary.sort_values('燃料費_円', ascending=False),
@@ -157,7 +136,6 @@ if uploaded_file:
         fig_fuel_cost.update_layout(xaxis_tickangle=-45, yaxis_tickformat=',')
         st.plotly_chart(fig_fuel_cost, use_container_width=True)
 
-        # アイドリング率色分け（2色）＆閾値ライン
         summary['アイドリング色'] = np.where(
             summary['月間アイドリング率_％'] >= idling_threshold, 'red', 'blue'
         )
@@ -176,12 +154,10 @@ if uploaded_file:
         fig2.update_layout(xaxis_tickangle=-45, showlegend=False)
         st.plotly_chart(fig2, use_container_width=True)
 
-        # 算出式の表示
         st.markdown('**算出式**')
         st.markdown('- 燃料使用量 (L) = 走行距離_km ÷ 想定燃費 (km/L)')
         st.markdown('- 燃料費 (円) = 燃料使用量 (L) × 燃料単価 (円/L)')
         st.markdown('- 月間平均燃費 (km/L) = 走行距離合計_km ÷ 燃料使用量合計_L')
         st.markdown('- 月間アイドリング率 (%) = アイドリング時間合計_分 ÷ 稼働時間合計_分 × 100')
-
     except Exception as e:
         st.error(f"エラー: {e}")
