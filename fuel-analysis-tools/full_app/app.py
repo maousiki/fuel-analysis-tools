@@ -57,6 +57,27 @@ def process_csv_data(df, fuel_price, fuel_efficiency, date_col=None):
 st.set_page_config(page_title='燃費見える化ダッシュボード', layout='wide')
 st.title('🚚 燃費見える化ダッシュボード')
 
+# --- ログイン機能追加 ---
+if 'logged_in' not in st.session_state:
+    st.session_state.logged_in = False
+if not st.session_state.logged_in:
+    st.subheader('🔒 ログイン')
+    username = st.text_input('ユーザーID')
+    password = st.text_input('パスワード', type='password')
+    if st.button('ログイン'):
+        # 認証情報（必要に応じて環境変数や外部サービスと置き換えてください）
+        valid_users = {'admin': 'password', 'user1': 'pass1'}
+        if username in valid_users and password == valid_users[username]:
+            st.session_state.logged_in = True
+            st.experimental_rerun()
+        else:
+            st.error('IDまたはパスワードが正しくありません')
+    # ログイン前はここで終了
+    st.stop()
+
+# ログイン成功後、以下が通常のダッシュボード表示
+
+
 col1, col2, col3 = st.columns(3)
 fuel_price = col1.number_input('燃料単価 (円/L)', value=160, step=1)
 fuel_efficiency = col2.number_input('想定燃費 (km/L)', value=5.0, step=0.1)
