@@ -35,10 +35,7 @@ def process_csv_data(df, fuel_price, fuel_efficiency, date_col=None):
 
     # 時間列の分変換
     for col in ['走行時間', 'アイドリング時間', '稼働時間']:
-        if col in df.columns:
-            df[f'{col}_分'] = df[col].apply(convert_time_to_minutes)
-        else:
-            df[f'{col}_分'] = pd.NA
+        df[f'{col}_分'] = df[col].apply(convert_time_to_minutes) if col in df.columns else pd.NA
 
     # アイドリング率: アイドリング時間 ÷ 稼働時間
     valid_active = df['稼働時間_分'] > 0
@@ -92,17 +89,27 @@ if uploaded_file:
             rename_map['アイドリング時間'] = 'アイドリング時間'
         if '稼働時間' in df_raw.columns:
             rename_map['稼働時間'] = '稼働時間'
+        # 日付 / 運行日 列のマッピング
+        # '日付' または 元々 '運行日' としている場合に対応
+        for date_key in ['日付', '運行日']:
+            if date_key in df_raw.columns:
+                rename_map[date_key] = '運行日'
+                break
+
         df = df_raw.rename(columns=rename_map)
         df = df.loc[:, ~df.columns.duplicated()]
 
         if '乗務員' not in df.columns:
             raise Exception("'乗務員' 列が見つかりません。CSVに '乗務員' 列を含めてください。")
 
+        # 日付列検出（変換用）
+        date_col = '運行日' if '運行日' in df.columns else None
+
         # データ処理
-        df = process_csv_data(df, fuel_price, fuel_efficiency, date_col='日付')
+        df = process_csv_data(df, fuel_price, fuel_efficiency, date_col)
         st.success('✅ データ読み込み完了')
 
-        # プレビュー表示
+        # データプレビュー
         st.subheader('🔍 データプレビュー')
         preview_cols = ['乗務員', '運行日', '走行距離_km', '燃料使用量_L', '燃料費_円', 'アイドリング率_％', '平均速度_km_h']
         st.dataframe(df[preview_cols])
@@ -136,8 +143,7 @@ if uploaded_file:
         st.subheader('📊 月間燃料使用量ランキング')
         fig_fuel_use = px.bar(
             summary.sort_values('燃料使用量_L', ascending=False),
-            x='乗務員', y='燃料使用量_L',
-            title='ドライバー別 月間燃料使用量 (L)'
+            x='乗務員', y='燃料使用量_L', title='ドライバー別 月間燃料使用量 (L)'
         )
         fig_fuel_use.update_layout(xaxis_tickangle=-45)
         st.plotly_chart(fig_fuel_use, use_container_width=True)
@@ -146,8 +152,7 @@ if uploaded_file:
         st.subheader('📊 月間燃料費ランキング')
         fig_fuel_cost = px.bar(
             summary.sort_values('燃料費_円', ascending=False),
-            x='乗務員', y='燃料費_円',
-            title='ドライバー別 月間燃料費 (円)'
+            x='乗務員', y='燃料費_円', title='ドライバー別 月間燃料費 (円)'
         )
         fig_fuel_cost.update_layout(xaxis_tickangle=-45, yaxis_tickformat=',')
         st.plotly_chart(fig_fuel_cost, use_container_width=True)
@@ -160,13 +165,11 @@ if uploaded_file:
         fig2 = px.bar(
             summary.sort_values('月間アイドリング率_％', ascending=False),
             x='乗務員', y='月間アイドリング率_％',
-            color='アイドリング色',
-            color_discrete_map={'red': 'red', 'blue': 'blue'},
+            color='アイドリング色', color_discrete_map={'red': 'red', 'blue': 'blue'},
             title=f'ドライバー別 月間アイドリング率 (%) (閾値: {idling_threshold}%)'
         )
         fig2.add_shape(
-            type='line',
-            x0=-0.5, x1=len(summary) - 0.5,
+            type='line', x0=-0.5, x1=len(summary) - 0.5,
             y0=idling_threshold, y1=idling_threshold,
             line=dict(color='black', dash='dash')
         )
@@ -179,5 +182,6 @@ if uploaded_file:
         st.markdown('- 燃料費 (円) = 燃料使用量 (L) × 燃料単価 (円/L)')
         st.markdown('- 月間平均燃費 (km/L) = 走行距離合計_km ÷ 燃料使用量合計_L')
         st.markdown('- 月間アイドリング率 (%) = アイドリング時間合計_分 ÷ 稼働時間合計_分 × 100')
+
     except Exception as e:
         st.error(f"エラー: {e}")
